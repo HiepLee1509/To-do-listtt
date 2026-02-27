@@ -4,12 +4,17 @@ import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 const JWT_SECRET = process.env.JWT_SECRET || 'mysecretkey';
+
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const aiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 // MongoDB connection
 const mongoURI = 'mongodb+srv://handsomelee:handsomelee@cluster0.ky8lcx0.mongodb.net/?appName=Cluster0';
@@ -19,15 +24,14 @@ mongoose.connect(process.env.MONGO_URI || mongoURI);
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  // New profile fields
   displayName: { type: String, default: "" },
   avatarUrl: { type: String, default: "" },
   bio: { type: String, default: "" },
-  birthday: { type: Date, default: null } 
+  birthday: { type: Date, default: null }
 });
 const User = mongoose.model('User', userSchema);
 
-// ====== Todo Schema and Model (link to userId), with DnD position ======
+// ====== Todo Schema and Model ======
 const todoSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
   text: { type: String, required: true },
@@ -39,7 +43,7 @@ const todoSchema = new mongoose.Schema({
   },
   createdAt: { type: Date, default: Date.now },
   dueDate: { type: Date, default: null },
-  position: { type: Number, default: 0, required: true } // for drag-and-drop ordering
+  position: { type: Number, default: 0, required: true }
 });
 const Todo = mongoose.model('Todo', todoSchema);
 
@@ -63,156 +67,79 @@ function authenticateToken(req, res, next) {
 }
 
 // ==== Authentication Routes ====
-
-// Register Route
 app.post('/register', async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password)
-      return res.status(400).json({ error: 'Username and password required' });
-
+    if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
     const existing = await User.findOne({ username });
-    if (existing)
-      return res.status(409).json({ error: 'Username already taken' });
-
+    if (existing) return res.status(409).json({ error: 'Username already taken' });
     const hashed = await bcrypt.hash(password, 10);
     const user = new User({ username, password: hashed });
     await user.save();
-
     res.json({ message: 'User registered' });
   } catch (err) {
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
-// Login Route
 app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password)
-      return res.status(400).json({ error: 'Username and password required' });
-
     const user = await User.findOne({ username });
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-
-    const token = jwt.sign(
-      { userId: user._id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    const token = jwt.sign({ userId: user._id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token });
   } catch (err) {
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// ==== User Profile Update Route ====
-// PUT /api/user/profile -- Auth required, only updates the user's editable profile fields
+// ==== User Profile Routes ====
 app.put('/api/user/profile', authenticateToken, async (req, res) => {
   try {
-    console.log("Received profile update request:", req.body); // Log request data
     const { displayName, avatarUrl, bio, birthday } = req.body;
-    
-    // Handle Date: Convert empty string to null to prevent CastError
-    let parsedBirthday = null;
-    if (birthday && birthday !== "") {
-      parsedBirthday = new Date(birthday);
-    }
-
-    const user = await User.findById(req.user.userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    user.displayName = displayName;
-    user.avatarUrl = avatarUrl;
-    user.bio = bio;
-    user.birthday = parsedBirthday;
-
-    await user.save();
-    console.log("User profile updated successfully");
-    // Return updated user profile (remove password)
-    const userObj = user.toObject();
-    delete userObj.password;
-    res.json(userObj);
+    let parsedBirthday = birthday && birthday !== "" ? new Date(birthday) : null;
+    const user = await User.findByIdAndUpdate(req.user.userId, { displayName, avatarUrl, bio, birthday: parsedBirthday }, { new: true }).select('-password');
+    res.json(user);
   } catch (err) {
-    console.error("Error updating profile:", err); // Log the specific error
-    res.status(500).json({ error: 'Internal Server Error: ' + err.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-// ==== GET /api/user/me Route ====
-// Get current user's profile data
 app.get('/api/user/me', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('-password');
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
     res.json(user);
   } catch (err) {
-    console.error("Error fetching user profile:", err);
     res.status(500).json({ error: 'Failed to fetch user profile' });
   }
 });
 
 // ==== Protected TODO Routes ====
-
-// GET: Retrieve all todos for current user, sorted by POSITION then createdAt
 app.get('/api/todos', authenticateToken, async (req, res) => {
   try {
-    // Now sorted by position (asc), then createdAt (asc)
-    const todos = await Todo.find({ userId: req.user.userId }).lean();
-    todos.sort((a, b) => {
-      if ((a.position ?? 0) !== (b.position ?? 0)) {
-        return (a.position ?? 0) - (b.position ?? 0);
-      } 
-      // fallback to createdAt (oldest first)
-      return (a.createdAt || 0) - (b.createdAt || 0);
-    });
+    const todos = await Todo.find({ userId: req.user.userId }).sort('position createdAt').lean();
     res.json(todos);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch todos' });
   }
 });
 
-// POST: Add new todo, setting its position (at end by default)
 app.post('/api/todos', authenticateToken, async (req, res) => {
   try {
-    //console.log("📨 Server nhận được:", req.body);
     const { text, priority, dueDate } = req.body;
     if (!text) return res.status(400).json({ error: 'Text required' });
-
-    let todoPriority = priority;
-    if (!['High', 'Medium', 'Low'].includes(todoPriority)) {
-      todoPriority = 'Medium';
-    }
-
-    // Prepare dueDate for Mongo
-    let realDueDate = null;
-    if (typeof dueDate !== "undefined" && dueDate !== null && dueDate !== "") {
-      const asDate = new Date(dueDate);
-      realDueDate = isNaN(asDate.getTime()) ? null : asDate;
-    }
-
-    // For drag reorder: new task goes to max position + 1 by default
     const lastTodo = await Todo.findOne({ userId: req.user.userId }).sort('-position');
-    let newPosition = 0;
-    if (lastTodo && typeof lastTodo.position === "number") {
-      newPosition = lastTodo.position + 1;
-    }
-
-    // Save to DB with accurate dueDate and position
+    const newPosition = lastTodo ? (lastTodo.position || 0) + 1 : 0;
     const newTodo = new Todo({
       text,
-      priority: todoPriority,
-      completed: false,
+      priority: ['High', 'Medium', 'Low'].includes(priority) ? priority : 'Medium',
       userId: req.user.userId,
-      dueDate: realDueDate,
+      dueDate: dueDate ? new Date(dueDate) : null,
       position: newPosition
     });
-
     const saved = await newTodo.save();
     res.json(saved);
   } catch (err) {
@@ -220,69 +147,26 @@ app.post('/api/todos', authenticateToken, async (req, res) => {
   }
 });
 
-// DELETE: Remove a todo by id for the current user
 app.delete('/api/todos/:id', authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
-    const todo = await Todo.findOne({ _id: id, userId: req.user.userId });
-    if (!todo) {
-      return res.status(404).json({ error: 'Todo not found or not yours' });
-    }
-
-    await Todo.deleteOne({ _id: id });
-    res.json({ message: 'Todo deleted', id: id });
+    await Todo.deleteOne({ _id: req.params.id, userId: req.user.userId });
+    res.json({ message: 'Todo deleted', id: req.params.id });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete todo' });
   }
 });
 
-// PUT: Update todo (allow updating dueDate and position)
 app.put('/api/todos/:id', authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
     const { text, completed, priority, dueDate, position } = req.body;
-
-    // Find todo and ensure ownership
-    const todo = await Todo.findOne({ _id: id, userId: req.user.userId });
-    if (!todo) {
-      return res.status(404).json({ error: 'Todo not found or not yours' });
-    }
-
-    // Update provided fields
-    if (typeof text === 'string') {
-      todo.text = text;
-    }
-    if (typeof completed === 'boolean') {
-      todo.completed = completed;
-    }
-    if (typeof priority === 'string' && ['High', 'Medium', 'Low'].includes(priority)) {
-      todo.priority = priority;
-    }
-    if (typeof position === 'number') {
-      todo.position = position;
-    }
-
-    // Due date logic: allow setting, clearing, or updating
-    if (Object.prototype.hasOwnProperty.call(req.body, 'dueDate')) {
-      if (dueDate === null || dueDate === "") {
-        todo.dueDate = null;
-      } else {
-        const dateObj = new Date(dueDate);
-        todo.dueDate = isNaN(dateObj.getTime()) ? null : dateObj;
-      }
-    }
-
-    // For API backward compat: toggle 'completed' if no fields
-    if (
-      text === undefined &&
-      completed === undefined &&
-      priority === undefined &&
-      dueDate === undefined &&
-      position === undefined
-    ) {
-      todo.completed = !todo.completed;
-    }
-
+    const todo = await Todo.findOne({ _id: req.params.id, userId: req.user.userId });
+    if (!todo) return res.status(404).json({ error: 'Todo not found' });
+    if (text !== undefined) todo.text = text;
+    if (completed !== undefined) todo.completed = completed;
+    if (priority !== undefined) todo.priority = priority;
+    if (position !== undefined) todo.position = position;
+    if (req.body.hasOwnProperty('dueDate')) todo.dueDate = dueDate ? new Date(dueDate) : null;
+    if (Object.keys(req.body).length === 0) todo.completed = !todo.completed;
     const updated = await todo.save();
     res.json(updated);
   } catch (err) {
@@ -290,32 +174,71 @@ app.put('/api/todos/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// ====== DRAG & DROP REORDERING ROUTE ======
-// PUT /api/todos/reorder
-// Accepts: [{ id: <id>, position: <number> }, ...]
 app.put('/api/todos/reorder', authenticateToken, async (req, res) => {
   try {
-    const updates = req.body;
-    if (!Array.isArray(updates)) {
-      return res.status(400).json({ error: 'Body must be an array of { id, position }' });
-    }
-    const ops = updates.map(up => {
-      if (typeof up.id !== "string" || typeof up.position !== "number") return null;
-      return Todo.updateOne(
-        { _id: up.id, userId: req.user.userId },
-        { $set: { position: up.position } }
-      );
-    }).filter(Boolean);
-
-    await Promise.all(ops);
-
+    const updates = req.body.map(up => Todo.updateOne({ _id: up.id, userId: req.user.userId }, { $set: { position: up.position } }));
+    await Promise.all(updates);
     res.json({ message: 'Reordered successfully' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to reorder todos' });
+    res.status(500).json({ error: 'Failed to reorder' });
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+// ==== Gemini AI Features ====
+
+// POST /api/todos/smart: Extract task details from prompt
+app.post('/api/todos/smart', authenticateToken, async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    const aiPrompt = `Extract task details from: "${prompt}". Return ONLY strict JSON: {"text": "string", "priority": "High"|"Medium"|"Low", "dueDate": "YYYY-MM-DD"|null}. Do not wrap in markdown blocks.`;
+    const result = await aiModel.generateContent(aiPrompt);
+
+    // Sanitize AI response to strictly remove any markdown
+    let rawResponse = result.response.text();
+    rawResponse = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    const data = JSON.parse(rawResponse);
+
+    const lastTodo = await Todo.findOne({ userId: req.user.userId }).sort('-position');
+    const todo = new Todo({
+      ...data,
+      userId: req.user.userId,
+      position: lastTodo ? (lastTodo.position || 0) + 1 : 0,
+      dueDate: data.dueDate ? new Date(data.dueDate) : null
+    });
+    await todo.save();
+    res.json(todo);
+  } catch (err) {
+    console.error("Smart Add Error:", err);
+    res.status(500).json({ error: 'Smart add failed: ' + err.message });
+  }
 });
+
+// POST /api/todos/:id/breakdown: Break task into sub-tasks
+app.post('/api/todos/:id/breakdown', authenticateToken, async (req, res) => {
+  try {
+    const parent = await Todo.findOne({ _id: req.params.id, userId: req.user.userId });
+    if (!parent) return res.status(404).json({ error: 'Todo not found' });
+
+    const aiPrompt = `Break down this task: "${parent.text}" into 3 smaller, actionable sub-tasks. Return ONLY a strict JSON array of strings: ["Subtask 1", "Subtask 2", "Subtask 3"]. No markdown formatting.`;
+    const result = await aiModel.generateContent(aiPrompt);
+    const subTaskTexts = JSON.parse(result.response.text());
+
+    const lastTodo = await Todo.findOne({ userId: req.user.userId }).sort('-position');
+    let startPos = lastTodo ? (lastTodo.position || 0) + 1 : 0;
+
+    const newTodos = await Todo.insertMany(subTaskTexts.map((text, i) => ({
+      text,
+      userId: req.user.userId,
+      dueDate: parent.dueDate,
+      priority: 'Medium',
+      position: startPos + i
+    })));
+
+    res.json(newTodos);
+  } catch (err) {
+    res.status(500).json({ error: 'Breakdown failed: ' + err.message });
+  }
+});
+
+app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
