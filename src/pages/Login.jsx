@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  ListTodo, 
-  BrainCircuit, 
-  Grip, 
-  CalendarClock, 
-  Sparkles 
+import {
+  ListTodo,
+  BrainCircuit,
+  Grip,
+  CalendarClock,
+  Sparkles
 } from 'lucide-react';
 
 export default function Login() {
@@ -20,7 +20,9 @@ export default function Login() {
     try {
       const res = await fetch('https://my-to-do-listtt.onrender.com/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ username, password }),
       });
       if (res.ok) {
@@ -46,7 +48,7 @@ export default function Login() {
   return (
     // THAY ĐỔI: Thêm bg-gradient cho container cha để Mobile cũng có nền đẹp
     <div className="flex min-h-screen w-full bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-      
+
       {/* Nửa bên trái: Giới thiệu (Ẩn trên mobile, Hiện trên Desktop) */}
       <div className="hidden md:flex w-1/2 flex-col justify-center items-center text-white p-12 relative overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-blue-500/20 rounded-full blur-3xl"></div>
@@ -89,10 +91,10 @@ export default function Login() {
       {/* Nửa bên phải: Form Login */}
       {/* THAY ĐỔI: Trên mobile background trong suốt để lộ gradient cha, trên desktop mới dùng bg-[#f8fafc] */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-4 md:p-8 md:bg-[#f8fafc] relative">
-        
+
         {/* Họa tiết nền chỉ hiện trên Desktop */}
         <div className="hidden md:block absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:20px_20px] opacity-50"></div>
-        
+
         <form
           onSubmit={handleSubmit}
           className="relative bg-white/90 md:bg-white/80 border border-white shadow-2xl rounded-3xl p-6 md:p-10 w-full max-w-md transition-all duration-300 backdrop-blur-xl"

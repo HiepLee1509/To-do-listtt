@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import CalendarIcon from '../common/CalendarIcon';
 import { PRIORITY_OPTIONS } from '../../constants';
@@ -17,11 +17,19 @@ export default function TodoItem({
   const { text, priority, dueDate, completed, _id } = task;
   const { editValue, editPriority, editDueDate } = editState;
   // actions chứa các hàm xử lý từ cha truyền xuống
-  const { saveEdit, cancelEdit, startEdit, deleteTask, toggleCompleted } = actions;
+  const { saveEdit, cancelEdit, startEdit, deleteTask, toggleCompleted, breakdownTask } = actions;
+  const [isBreakingDown, setIsBreakingDown] = useState(false);
+
+  const handleBreakdown = async () => {
+    if (!breakdownTask) return;
+    setIsBreakingDown(true);
+    await breakdownTask(_id);
+    setIsBreakingDown(false); // Task refresh handles data, but we reset loading state just in case
+  };
 
   const isOverdue = isDateOverdue(dueDate);
   const isDueToday = isDateToday(dueDate);
-  
+
   let borderClass = "";
   if (isOverdue) {
     borderClass = "border-2 border-red-500 shadow-sm";
@@ -50,9 +58,9 @@ export default function TodoItem({
           {/* Drag Handle */}
           {!isEditing && !isDragDisabled ? (
             <span className="cursor-grab pr-1 flex items-center select-none opacity-60 hover:opacity-100 transition">
-               <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-                <circle cx="5.5" cy="6" r="1.2" fill="#94a3b8"/><circle cx="5.5" cy="10" r="1.2" fill="#94a3b8"/><circle cx="5.5" cy="14" r="1.2" fill="#94a3b8"/>
-                <circle cx="9.5" cy="6" r="1.2" fill="#94a3b8"/><circle cx="9.5" cy="10" r="1.2" fill="#94a3b8"/><circle cx="9.5" cy="14" r="1.2" fill="#94a3b8"/>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                <circle cx="5.5" cy="6" r="1.2" fill="#94a3b8" /><circle cx="5.5" cy="10" r="1.2" fill="#94a3b8" /><circle cx="5.5" cy="14" r="1.2" fill="#94a3b8" />
+                <circle cx="9.5" cy="6" r="1.2" fill="#94a3b8" /><circle cx="9.5" cy="10" r="1.2" fill="#94a3b8" /><circle cx="9.5" cy="14" r="1.2" fill="#94a3b8" />
               </svg>
             </span>
           ) : <span className="pr-1" />}
@@ -73,7 +81,7 @@ export default function TodoItem({
                 <input
                   type="text"
                   value={editValue}
-                  onChange={e => setEditState(prev => ({...prev, editValue: e.target.value}))}
+                  onChange={e => setEditState(prev => ({ ...prev, editValue: e.target.value }))}
                   className="flex-1 text-base rounded-md px-2 py-1 mr-2 focus:ring-2 focus:ring-cyan-200 bg-white/70 outline-none text-slate-700 shadow"
                   onKeyDown={e => {
                     if (e.key === 'Enter') saveEdit(_id);
@@ -81,7 +89,7 @@ export default function TodoItem({
                   }}
                   autoFocus
                 />
-                <select value={editPriority} onChange={e => setEditState(prev => ({...prev, editPriority: e.target.value}))} className="px-2 py-1 rounded-md border-none bg-white/80 text-slate-800 text-sm focus:ring-2 focus:ring-cyan-300 shadow-sm font-semibold">
+                <select value={editPriority} onChange={e => setEditState(prev => ({ ...prev, editPriority: e.target.value }))} className="px-2 py-1 rounded-md border-none bg-white/80 text-slate-800 text-sm focus:ring-2 focus:ring-cyan-300 shadow-sm font-semibold">
                   {PRIORITY_OPTIONS.map(opt => <option value={opt.value} key={opt.value}>{opt.label}</option>)}
                 </select>
                 <div className="relative flex items-center ml-2">
@@ -90,9 +98,9 @@ export default function TodoItem({
                     <input
                       type="datetime-local"
                       value={editDueDate}
-                      onChange={e => setEditState(prev => ({...prev, editDueDate: e.target.value}))} 
+                      onChange={e => setEditState(prev => ({ ...prev, editDueDate: e.target.value }))}
                       className="ml-2 bg-transparent text-xs text-cyan-800 font-semibold outline-none"
-                      style={{maxWidth: '130px'}}
+                      style={{ maxWidth: '130px' }}
                     />
                   </div>
                 </div>
@@ -123,11 +131,26 @@ export default function TodoItem({
           {/* Action Buttons */}
           {!isEditing && !isDragDisabled && (
             <div className="flex items-center gap-2 ml-2 opacity-70 group-hover:opacity-100 transition">
+              <button
+                onClick={handleBreakdown}
+                disabled={isBreakingDown}
+                className="rounded-full p-1.5 hover:bg-purple-100/60 transition disabled:opacity-50"
+                aria-label="AI Breakdown"
+              >
+                {isBreakingDown ? (
+                  <svg className="animate-spin" height="18" width="18" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="#a855f7" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="#a855f7" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <svg height="18" width="18" viewBox="0 0 16 16" fill="none"><path d="M8 0l1.669 4.661L14.33 6.33 9.669 8 8 12.661 6.331 8 1.67 6.33 6.331 4.661 8 0z" fill="#a855f7" /></svg>
+                )}
+              </button>
               <button onClick={() => startEdit(task)} className="rounded-full p-1.5 hover:bg-cyan-100/60 transition" aria-label="Edit">
                 <svg height="18" width="18" viewBox="0 0 20 20" fill="none"><path d="M14.85 2.85a1.207 1.207 0 0 1 1.7 1.7l-1 1-1.7-1.7 1-1zM3 13.75l8.73-8.73 1.7 1.7L4.7 15.4H3v-1.65z" fill="#06b6d4" /></svg>
               </button>
               <button onClick={() => deleteTask(_id)} className="rounded-full p-1.5 hover:bg-red-100/70 transition text-red-500" aria-label="Delete">
-                <svg width={18} height={18} fill="none" viewBox="0 0 20 20"><path d="M6 7v7m4-7v7m4-10v1m-8-1v1m4 8a1 1 0 001 1h2a1 1 0 001-1V7a1 1 0 00-1-1h-6a1 1 0 00-1 1v7a1 1 0 001 1h2a1 1 0 001-1z" stroke="#ef4444" strokeWidth="1.5"/></svg>
+                <svg width={18} height={18} fill="none" viewBox="0 0 20 20"><path d="M6 7v7m4-7v7m4-10v1m-8-1v1m4 8a1 1 0 001 1h2a1 1 0 001-1V7a1 1 0 00-1-1h-6a1 1 0 00-1 1v7a1 1 0 001 1h2a1 1 0 001-1z" stroke="#ef4444" strokeWidth="1.5" /></svg>
               </button>
             </div>
           )}

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  ListTodo, 
-  BrainCircuit, 
-  Grip, 
-  CalendarClock, 
+import {
+  ListTodo,
+  BrainCircuit,
+  Grip,
+  CalendarClock,
   Sparkles,
   UserPlus
 } from 'lucide-react';
@@ -24,7 +24,7 @@ export default function Register() {
       const res = await fetch('https://my-to-do-listtt.onrender.com/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password }), // Keeping original state variables as per current code
       });
       if (res.ok) {
         setSuccess('Registration successful! Redirecting...');
@@ -48,7 +48,7 @@ export default function Register() {
   return (
     // THAY ĐỔI: Thêm gradient cho container cha
     <div className="flex min-h-screen w-full bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-      
+
       {/* Nửa trái: Giới thiệu (Ẩn trên mobile) */}
       <div className="hidden md:flex w-1/2 flex-col justify-center items-center text-white p-12 relative overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-blue-500/20 rounded-full blur-3xl"></div>
@@ -92,7 +92,7 @@ export default function Register() {
       {/* THAY ĐỔI: Bg trong suốt trên mobile */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-4 md:p-8 md:bg-[#f8fafc] relative">
         <div className="hidden md:block absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:20px_20px] opacity-50"></div>
-        
+
         <form
           onSubmit={handleSubmit}
           className="relative bg-white/90 md:bg-white/80 border border-white shadow-2xl rounded-3xl p-6 md:p-10 w-full max-w-md transition-all duration-300 backdrop-blur-xl"

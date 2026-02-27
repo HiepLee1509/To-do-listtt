@@ -59,12 +59,16 @@ export default function Home() {
   }, [navigate]);
 
   // --- 3. Truyền hàm đã memoize vào hook ---
-  const { tasks, loading, addTask, deleteTask, updateTask, reorderTasks } = useTodos(token, handleLogoutAuth);
+  const { tasks, loading, addTask, deleteTask, updateTask, reorderTasks, smartAddTask, breakdownTask } = useTodos(token, handleLogoutAuth);
 
   // State Input
   const [input, setInput] = useState('');
   const [inputPriority, setInputPriority] = useState('Medium');
   const [inputDueDate, setInputDueDate] = useState(getNowDatetimeLocal());
+
+  // State AI Input
+  const [aiInput, setAiInput] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   // State Edit
   const [editingId, setEditingId] = useState(null);
@@ -91,6 +95,16 @@ export default function Home() {
       setInputPriority('Medium');
       setInputDueDate(getNowDatetimeLocal());
     }
+  };
+
+  const onSmartAddTask = async () => {
+    if (!aiInput.trim()) return;
+    setIsAiLoading(true);
+    const success = await smartAddTask(aiInput.trim());
+    if (success) {
+      setAiInput('');
+    }
+    setIsAiLoading(false);
   };
 
   const onToggleCompleted = (id) => {
@@ -137,7 +151,7 @@ export default function Home() {
     const newTasks = Array.from(tasks);
     const [removed] = newTasks.splice(fromIdx, 1);
     newTasks.splice(toIdx, 0, removed);
-    
+
     reorderTasks(newTasks);
   };
 
@@ -147,7 +161,7 @@ export default function Home() {
     fetch(API_ME_URL, { headers: { Authorization: 'Bearer ' + token } })
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data) setUserProfile(data); })
-      .catch(() => {});
+      .catch(() => { });
   }, [token]);
 
   useEffect(() => {
@@ -201,7 +215,7 @@ export default function Home() {
 
       {/* Nút Mobile Menu: Đặt z-50 để nổi lên trên */}
       <button onClick={() => setSidebarOpen(!sidebarOpen)} className="absolute top-4 left-4 z-50 md:hidden rounded-full p-2 bg-white/90 shadow-lg text-cyan-600">
-        <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
       </button>
 
       <Sidebar
@@ -219,7 +233,7 @@ export default function Home() {
           - Desktop: px-12, pt-6
       */}
       <main className="flex-1 w-full flex flex-col h-full overflow-hidden bg-white/95 backdrop-blur-lg shadow-2xl rounded-none border-l border-white/20 px-4 pt-16 md:px-12 md:pt-6">
-        
+
         {/* Header */}
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
@@ -236,6 +250,8 @@ export default function Home() {
           priority={inputPriority} setPriority={setInputPriority}
           dueDate={inputDueDate} setDueDate={setInputDueDate}
           onAdd={onAddTask}
+          aiInput={aiInput} setAiInput={setAiInput}
+          onSmartAdd={onSmartAddTask} isAiLoading={isAiLoading}
         />
 
         <div className="flex-1 overflow-y-auto hide-scrollbar py-2 pb-20 md:pb-2">
@@ -262,7 +278,8 @@ export default function Home() {
                           deleteTask,
                           startEdit: startEditTask,
                           cancelEdit: () => setEditingId(null),
-                          saveEdit: handleSaveEdit
+                          saveEdit: handleSaveEdit,
+                          breakdownTask
                         }}
                       />
                     ))}
