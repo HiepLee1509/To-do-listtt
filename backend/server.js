@@ -190,14 +190,19 @@ app.put('/api/todos/reorder', authenticateToken, async (req, res) => {
 app.post('/api/todos/smart', authenticateToken, async (req, res) => {
   try {
     const { prompt } = req.body;
-    const aiPrompt = `Extract task details from: "${prompt}". Return ONLY strict JSON: {"text": "string", "priority": "High"|"Medium"|"Low", "dueDate": "YYYY-MM-DD"|null}. Do not wrap in markdown blocks.`;
+    const aiPrompt = `Extract task details from: "${prompt}". Return ONLY a strict JSON object with EXACTLY these keys: "text" (string, REQUIRED), "priority" ("High"|"Medium"|"Low"), and "dueDate" ("YYYY-MM-DD" or null). You MUST include the exact key "text". Do not include markdown formatting or \`\`\`json tags.`;
     const result = await aiModel.generateContent(aiPrompt);
 
     // Sanitize AI response to strictly remove any markdown
     let rawResponse = result.response.text();
-    rawResponse = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+    rawResponse = rawResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
 
     const data = JSON.parse(rawResponse);
+
+    // Validation Guard
+    if (!data.text) {
+      return res.status(400).json({ error: 'AI failed to generate a valid task name' });
+    }
 
     const lastTodo = await Todo.findOne({ userId: req.user.userId }).sort('-position');
     const todo = new Todo({
