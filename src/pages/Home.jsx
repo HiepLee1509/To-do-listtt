@@ -211,7 +211,17 @@ export default function Home() {
 
   return (
     <div className="w-screen h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex relative overflow-hidden">
-      {/* ... (Confetti, Celebration, ProfileModal) giữ nguyên ... */}
+      {showCelebration && <Confetti width={width} height={height} style={{ zIndex: 1000 }} />}
+
+      <ProfileModal
+        show={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        profile={profileDraft}
+        onChange={setProfileDraft}
+        onSave={handleSaveProfile}
+        saving={profileSaving}
+        error={profileError}
+      />
 
       {/* Nút Mobile Menu: Đặt z-50 để nổi lên trên */}
       <button onClick={() => setSidebarOpen(!sidebarOpen)} className="absolute top-4 left-4 z-50 md:hidden rounded-full p-2 bg-white/90 shadow-lg text-cyan-600">
